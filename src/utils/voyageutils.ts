@@ -1,6 +1,7 @@
 // This code is heavily inspired from IAmPicard's work and released under the GPL-V3 license. Huge thanks for all his contributions!
 import CONFIG from '../components/CONFIG';
 
+import { voyageEngines } from '../wasm/wasmWorker';
 import ComputeWorker from 'worker-loader!../wasm/wasmWorker';
 
 export interface IBuffStat {
@@ -149,9 +150,12 @@ export function exportVoyageData(options) {
 	let dataToExport = {
 		// These values get filled in the following code
 		crew: [],
-		binaryConfig: undefined
+		binaryConfig: undefined,
+        engine: 0
 	};
 
+    dataToExport.engine = options.engine;
+    
 	let binaryConfigBuffer = new ArrayBuffer(34);
 	let binaryConfig = new DataView(binaryConfigBuffer);
 	binaryConfig.setUint8(0, options.searchDepth);
@@ -240,14 +244,15 @@ export function exportVoyageData(options) {
 	binaryConfig.setUint16(32, dataToExport.crew.length, true);
 
 	dataToExport.binaryConfig = Array.from(new Uint8Array(binaryConfigBuffer));
-
+    
 	return dataToExport;
 }
 
 export function calculateVoyage(options, progressCallback: (result: ICalcResult) => void, doneCallback: (result: ICalcResult) => void) {
-	let dataToExport = exportVoyageData(options);
-
-	const worker = new ComputeWorker();
+	let engineDetails = voyageEngines[options.engine];
+    let dataToExport = engineDetails.packOptions ? exportVoyageData(options) : options;
+ 
+    const worker = new ComputeWorker();
 	worker.addEventListener('message', message => {
 		if (message.data.progressResult) {
 			progressCallback(parseResults(Uint8Array.from(message.data.progressResult)));
@@ -317,4 +322,9 @@ export function bonusCrewForCurrentEvent(playerData: any, crewlist: any[]): Bonu
     }
 
     return undefined;
+}
+
+
+export function listCalculators() {
+    return voyageEngines.map(calculator => calculator.name);
 }
