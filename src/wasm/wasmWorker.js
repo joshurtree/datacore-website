@@ -1,31 +1,40 @@
 /* eslint-disable */
 
 import wasm from './voymod.js';
-//import USSJJEngine from './mvamod.js'
+import USSJJEngine from './mvamod.js'
+
+class IAmPicardEngine {
+    constructor(options) {
+        this.options = JSON.stringify(message.data);
+    }
+    
+    
+    calculate(progressCallback, resultCallback) {
+        resultCallback(calculate(this.options, progressCallback));
+    }
+}
 
 export const voyageEngines = [
     {
         name: 'I Am Picard', 
-        obj: wasm,
+        engine: IAmPicardEngine,
         packOptions: true
     },
     {
         name: 'USSJohnJay',
-        obj: USSJJEngine,
+        engine: USSJJEngineCreator,
         packOptions: false
     }
 ];
 
 self.addEventListener('message', message => {
     let engineDetails = voyageEngines[message.data.engine];
-    engineDetails.obj().then(mod => {
-        let result = mod.calculate(engineDetails.packOptions ? JSON.stringify(message.data) : message.data, progressResult => {
-            self.postMessage({ progressResult });
-        });
-
-        self.postMessage({ result });
-
-        // close this worker
-        self.close();
-    });
+    let engine = new voyageEngines.engine();
+    //console.log(engineDetails.obj);
+    
+    engine.calculate(progressResult => self.postMessage({ progressResult }), 
+                     result => { 
+                         self.postMessage({ result }); 
+                         self.close(); 
+                    });
 });

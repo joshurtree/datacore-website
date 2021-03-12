@@ -5,7 +5,8 @@ import {
 	ICalcResult,
 	calculateVoyage,
 	formatTimeSeconds,
-	BonusCrew
+	BonusCrew,
+    listCalculators
 } from '../utils/voyageutils';
 
 import { applyCrewBuffs} from '../utils/crewutils';
@@ -37,6 +38,7 @@ type VoyageCalculatorState = {
 	activeEvent: string | undefined;
 	peopleList: any;
 	currentSelection: any[];
+    engine: string;
 	searchDepth: number;
 	extendsTarget: number;
 };
@@ -55,8 +57,10 @@ class VoyageCalculator extends Component<VoyageCalculatorProps, VoyageCalculator
 			peopleList: undefined,
 			currentSelection: [],
 			activeEvent: undefined,
+            engine: 'voy',
 			searchDepth: 6,
-			extendsTarget: 0
+			extendsTarget: 0,
+            engine: 0
 		};
 	}
 
@@ -152,7 +156,7 @@ class VoyageCalculator extends Component<VoyageCalculatorProps, VoyageCalculator
 		}
 
 		let peopleListStyle = this.state.includeFrozen ? 'all' : 'default';
-
+        
 		return (
 			<div style={{ margin: '5px' }}>
 				{currentVoyage && <p>It looks like you already have a voyage started!</p>}
@@ -162,6 +166,14 @@ class VoyageCalculator extends Component<VoyageCalculatorProps, VoyageCalculator
 				</Message>
 				<Form className='attached fluid segment'>
 					<Form.Group inline>
+                        <Form.Field
+                            control={Select}
+                            label='Engine'
+                            options={listCalculators().map((name, index) => { return { key: name, text: name, value: index }})}
+                            value={this.state.engine}
+                            onChange={(e, {value}) => this.setState({engine : value})}
+                            placeholder='Engine'
+                        />
 						<Form.Field
 							control={Select}
 							label='Search depth'
@@ -271,7 +283,14 @@ class VoyageCalculator extends Component<VoyageCalculatorProps, VoyageCalculator
                     </Modal.Content>
                     <Modal.Description>
                         <Segment basic textAlign={"center"}>
-                            <Button onClick={e => this.setState({calcState : CalculatorState.Done})}>Abort</Button>
+                            <Button onClick={e => 
+                                this.setState({
+                                    calcState : CalculatorState.Done, 
+                                    activeWorkerId: this.state.activeWorkerId + 1})
+                                }
+                            >
+                                Abort
+                            </Button>
                         </Segment>
                     </Modal.Description>
                 </Modal>
@@ -383,6 +402,7 @@ class VoyageCalculator extends Component<VoyageCalculatorProps, VoyageCalculator
 		});
 
 		return {
+            engine: this.state.engine,
 			searchDepth: this.state.searchDepth,
 			extendsTarget: this.state.extendsTarget,
 			shipAM: shipAM,
@@ -397,21 +417,18 @@ class VoyageCalculator extends Component<VoyageCalculatorProps, VoyageCalculator
 
 	_calcVoyageData(shipAM: number) {
 		let options = this._packVoyageOptions(shipAM);
+        const resultHandler = final => (calcResult, id) => {
+            this.setState({
+                result: calcResult,
+                calcState: final ? CalculatorState.Done : CalculatorState.InProgress
+            });
+        }
 
-		calculateVoyage(
+            
+        calculateVoyage(
 			options,
-			calcResult => {
-				this.setState({
-					result: calcResult,
-					calcState: CalculatorState.InProgress
-				});
-			},
-			calcResult => {
-				this.setState({
-					result: calcResult,
-					calcState: CalculatorState.Done
-				});
-			}
+			resultHandler(false),
+			resultHandler(true)
 		);
 	}
 }

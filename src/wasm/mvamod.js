@@ -22,33 +22,47 @@
 //  https://github.com/stt-datacore/website
 //  https://github.com/iamtosk/StarTrekTimelinesSpreadsheet
 
-import ChewableEstimator  from './chewable.js'
+import ChewableEstimator  from './chewable.js';
 
-export class USSJJEngine {
-    calculate(options) {
-        return new Promise((resolve, reject) => {
-            const voyagers = new Voyagers(options.roster);
-            voyagers.assemble(options.voyage_description)
-                .then((lineups) => {
-                    // Now figure out which lineup is "best"
-                    const analyzer = new VoyagersAnalyzer(options.voyage_description, { score : options.shipAM }, lineups);
-                    let estimator = (config) => ChewableEstimator(config);
-                    let sorter = (a, b) => this._chewableSorter(a, b);
-                    analyzer.analyze(estimator, sorter)
-                        .then(([lineup, estimate, log]) => {
-                            resolve({
-                                entries : Object.keys(lineup.crew).map(slot => {return { slotId: slot, choice: lineup.crew[slot].id }}),
-                                score : estimate
-                            });
-						
-					});
-			})
-			.catch((error) => {
-				console.log(error);
-			});
+class USSJJEngine {
+    constructor(options) {
+        this.voyagers = new Voyagers(options.roster);
+        this.options = options;
+    }
+    
+    calculate(progressCallback, resultCallBack) {
+        this.voyagers.assemble(this.options.voyage_description).then(lineups => {
+            // Now figure out which lineup is "best"
+            const analyzer = new VoyagersAnalyzer(this.options.voyage_description, { score : this.options.shipAM }, lineups);
+            let estimator = (config) => ChewableEstimator().calculate(config);
+            let sorter = (a, b) => this._chewableSorter(a, b);
+            analyzer(estimator, sorter).then((lineup, estimate, log) => {
+                resultCallBack({
+                    entries : Object.keys(lineup.crew).map(slot => {return { slotId: slot, choice: lineup.crew[slot].id }}),
+                    score : estimate
+                });
+            });
         });
     }
+    
+    _chewableSorter(a, b) {
+		const playItSafe = false;
+
+		let aEstimate = a.estimate.refills[0];
+		let bEstimate = b.estimate.refills[0];
+
+		// Return best average (w/ DataCore pessimism) by default
+		let aAverage = (aEstimate.result*3+aEstimate.safeResult)/4;
+		let bAverage = (bEstimate.result*3+bEstimate.safeResult)/4;
+
+		if (playItSafe || aAverage == bAverage)
+			return bEstimate.saferResult - aEstimate.saferResult;
+
+		return bAverage - aAverage;
+	}
 }
+
+export default USSJJEngine;
 
 class Voyagers {
 	constructor(crew, config = {}) {
@@ -177,7 +191,7 @@ class Voyagers {
 		let self = this;
 		let debug = this.config.debugCallback;
 		return new Promise((resolve, reject) => {
-			let iAttempts = 0;
+
 
 			let sequence = Promise.resolve();
 			for (let i = 0; i < maxAttempts; i++) {
@@ -193,7 +207,9 @@ class Voyagers {
 					});
 				})
 				.then((lineup) => {
-					// Proximity is how close a lineup is to hitting its target scores, lower is better
+                    let iAttempts = 0;                    
+                    let boosts = false;
+                    // Proximity is how close a lineup is to hitting its target scores, lower is better
 					//	We'll use promixity to narrow the lineups for which to calculate estimates
 					let deviations = self.getDeviations(
 											lineup.score,
@@ -201,13 +217,15 @@ class Voyagers {
 											lineup.skills[voyage.skills.secondary_skill]
 										);
 					let proximity = Math.abs(deviations.primary)+Math.abs(deviations.secondary);
-					lineup.vector = {
+                    
+                    lineup.vector = {
 						'id': vectorId,
 						'attempt': iAttempts+1,
 						'boosts': boosts,
 						'deviations': deviations,
 						'proximity': proximity
 					};
+
 
 					// Only keep track of unique lineups, but use lineup with higher AM if available
 					let existing = self.uniques.find((unique) => unique.uniqueId == lineup.key);
